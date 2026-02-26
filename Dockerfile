@@ -2,45 +2,35 @@
 # Enable here-documents:
 # https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md#here-documents
 
-FROM debian:bullseye-20220328-slim AS build
+FROM debian:trixie-20260202-slim AS build
 
 ARG DEBIAN_FRONTEND='noninteractive'
 
 # Install Debian packaging packages.
 RUN apt-get update && \
-    apt-get install --yes \
+    apt-get install --yes --no-install-recommends \
       debhelper \
-      dpkg-dev \
       devscripts \
+      dpkg-dev \
       equivs
 
 # Install general-purpose packages.
 RUN apt-get install --yes --no-install-recommends \
       git \
-      wget \
-      python3-pip \
-      cmake \
-      pkg-config
+      pkg-config \
+      wget
 
-# Install additional libnice dependency packages.
+# libnice build dependencies.
+# libnice requires GLib and OpenSSL (for DTLS), and is built with Meson/Ninja.
 RUN apt-get install --yes --no-install-recommends \
       libglib2.0-dev \
       libssl-dev \
+      meson \
       ninja-build
-
-RUN pip3 install meson
-
-# Install additional Janus dependency packages.
-RUN apt-get install --yes --no-install-recommends \
-      automake \
-      libtool \
-      libjansson-dev \
-      libconfig-dev \
-      gengetopt
 
 # libince is recommended to be installed from source because the version
 # installed via apt is too low.
-ARG LIBNICE_VERSION='0.1.18'
+ARG LIBNICE_VERSION='0.1.22'
 RUN git clone https://gitlab.freedesktop.org/libnice/libnice \
       --branch "${LIBNICE_VERSION}" \
       --single-branch && \
@@ -49,17 +39,30 @@ RUN git clone https://gitlab.freedesktop.org/libnice/libnice \
     ninja -C build && \
     ninja -C build install
 
-ARG LIBSRTP_VERSION='2.2.0'
-RUN wget "https://github.com/cisco/libsrtp/archive/v${LIBSRTP_VERSION}.tar.gz" && \
-    tar xfv "v${LIBSRTP_VERSION}.tar.gz" && \
-    cd "libsrtp-${LIBSRTP_VERSION}" && \
+# libsrtp build dependencies.
+# Uses the NSS crypto backend (--enable-nss) to avoid OpenSSL symbol
+# incompatibilities, consistent with how Debian packages libsrtp2.
+RUN apt-get install --yes --no-install-recommends \
+      libnss3-dev
+
+ARG LIBSRTP_VERSION='2.7.0'
+RUN git clone https://github.com/cisco/libsrtp \
+      --branch "v${LIBSRTP_VERSION}" \
+      --single-branch && \
+    cd libsrtp && \
     ./configure \
       --prefix=/usr \
-      --enable-openssl && \
+      --enable-nss && \
     make shared_library && \
     make install
 
-ARG LIBWEBSOCKETS_VERSION='v3.2-stable'
+# libwebsockets build dependencies.
+# libwebsockets requires OpenSSL and is built with CMake.
+RUN apt-get install --yes --no-install-recommends \
+      cmake \
+      libssl-dev
+
+ARG LIBWEBSOCKETS_VERSION='v4.3.5'
 RUN git clone https://libwebsockets.org/repo/libwebsockets \
       --branch "${LIBWEBSOCKETS_VERSION}" \
       --single-branch && \
@@ -142,12 +145,17 @@ Section: comm
 Priority: optional
 Maintainer: TinyPilot Support <support@tinypilotkvm.com>
 Build-Depends:
- debhelper (>= 11),
+ automake,
+ debhelper (>= 13),
  dh-exec,
+ gengetopt,
  libconfig-dev,
  libglib2.0-dev,
  libjansson-dev,
- libssl-dev
+ libssl-dev,
+ libtool,
+ pkg-config,
+ zlib1g-dev
 
 Package: ${PKG_NAME}
 Architecture: ${PKG_ARCH}
@@ -169,7 +177,7 @@ RUN mk-build-deps \
       control
 
 RUN cat >changelog <<EOF
-${PKG_NAME} (${PKG_VERSION}-${PKG_BUILD_NUMBER}) bullseye; urgency=medium
+${PKG_NAME} (${PKG_VERSION}-${PKG_BUILD_NUMBER}) trixie; urgency=medium
 
   * Janus ${PKG_VERSION} release.
 
