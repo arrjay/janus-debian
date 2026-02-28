@@ -128,7 +128,7 @@ RUN git clone https://github.com/meetecho/janus-gateway.git \
 # Janus can find these libraries at runtime.
 RUN mkdir shlib && \
     cp --no-dereference \
-      /usr/lib/arm-linux-gnueabihf/libnice.so* \
+      /usr/lib/"$(dpkg-architecture -qDEB_BUILD_MULTIARCH)"/libnice.so* \
       /usr/lib/libsrtp2.so* \
       /usr/lib/libwebsockets.so* \
       shlib
