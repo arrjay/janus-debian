@@ -3,5 +3,5 @@
 set -ex
 
 mkdir ./output
-mv build/*.deb ./output
+mv build/*/*.deb ./output
 cd ./output && zip packages.zip *.deb
